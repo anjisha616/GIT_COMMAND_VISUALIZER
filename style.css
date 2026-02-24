@@ -1,3 +1,53 @@
+/* Onboarding styles */
+.onboard-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 18px;
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: background 0.2s;
+}
+.onboard-btn:hover {
+  background: #2563eb;
+}
+.onboarding-panel {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 18px;
+  padding: 18px 20px;
+  max-width: 420px;
+  box-shadow: 0 2px 12px #0002;
+  font-size: 15px;
+  font-family: inherit;
+}
+.onboarding-step-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.onboarding-step-desc {
+  margin-bottom: 12px;
+}
+.onboarding-step-action {
+  background: var(--bg-hover);
+  border-radius: 5px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-family: inherit;
+  font-size: 15px;
+}
+.onboarding-step-done {
+  color: var(--success);
+  font-weight: 500;
+  margin-left: 8px;
+}
 /* ============================================================
    GIT VISUALIZER — styles.css  v2
    ============================================================ */
