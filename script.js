@@ -913,6 +913,7 @@ const Scenarios = (() => {
 const App = (() => {
 
   let _svgEl, _emptyEl, _legendEl, _statusEl, _viewportEl;
+  let _onboarding = null;
 
   function init() {
     _svgEl      = document.getElementById('graph-svg');
@@ -939,8 +940,121 @@ const App = (() => {
       if (e.key === 'Escape')             { DetailPanel.hide(); }
     });
 
+    // Onboarding button logic
+    const tutorialBtn = document.getElementById('start-tutorial-btn');
+    if (tutorialBtn) {
+      tutorialBtn.addEventListener('click', () => {
+        _onboarding = new Onboarding(document.getElementById('onboarding-panel'), _handleCommand, () => _rerender());
+        _onboarding.start();
+      });
+    }
+
     _rerender();
   }
+// Onboarding Tutorial Logic
+class Onboarding {
+  constructor(panelEl, runCommand, rerender) {
+    this.panelEl = panelEl;
+    this.runCommand = runCommand;
+    this.rerender = rerender;
+    this.steps = [
+      {
+        title: 'Step 1: Initialize Repository',
+        desc: 'Let\'s start by initializing a new git repository.',
+        action: 'Type <code>git init</code> below and press Enter.',
+        check: () => GitState.isInitialized(),
+        suggest: 'git init',
+      },
+      {
+        title: 'Step 2: Make Your First Commit',
+        desc: 'Now, create your first commit. Try: <code>git commit -m \"first commit\"</code>',
+        action: 'Type <code>git commit -m "first commit"</code> and press Enter.',
+        check: () => {
+          const snap = GitState.snapshot();
+          return snap.initialized && Object.keys(snap.commits).length > 0;
+        },
+        suggest: 'git commit -m "first commit"',
+      },
+      {
+        title: 'Step 3: Create a Branch',
+        desc: 'Let\'s create a new branch called <b>feature</b>.',
+        action: 'Type <code>git branch feature</code> and press Enter.',
+        check: () => {
+          const snap = GitState.snapshot();
+          return snap.branches && snap.branches['feature'];
+        },
+        suggest: 'git branch feature',
+      },
+      {
+        title: 'Step 4: Switch to the Feature Branch',
+        desc: 'Now, switch to your new branch.',
+        action: 'Type <code>git checkout feature</code> and press Enter.',
+        check: () => {
+          const snap = GitState.snapshot();
+          return snap.HEAD === 'feature';
+        },
+        suggest: 'git checkout feature',
+      },
+      {
+        title: 'Step 5: Merge Feature Branch',
+        desc: 'Finally, merge <b>feature</b> back into <b>main</b>.',
+        action: 'Switch to <code>main</code> (<code>git checkout main</code>), then type <code>git merge feature</code>.',
+        check: () => {
+          const snap = GitState.snapshot();
+          // Check if main branch tip is a merge commit with feature as parent
+          if (snap.HEAD !== 'main') return false;
+          const mainSha = snap.branches['main'];
+          const commit = snap.commits[mainSha];
+          return commit && commit.isMerge && commit.parents && commit.parents.length === 2;
+        },
+        suggest: 'git checkout main',
+      },
+    ];
+    this.current = 0;
+    this._boundOnInput = this.onInput.bind(this);
+    this._boundOnSuggest = this.onSuggest.bind(this);
+    document.getElementById('terminal-input').addEventListener('input', this._boundOnInput);
+  }
+
+  start() {
+    this.panelEl.style.display = '';
+    this.current = 0;
+    this.render();
+  }
+
+  render() {
+    const step = this.steps[this.current];
+    let html = `<div class="onboarding-step-title">${step.title}</div>`;
+    html += `<div class="onboarding-step-desc">${step.desc}</div>`;
+    html += `<div class="onboarding-step-action">👉 ${step.action}`;
+    if (step.check()) html += '<span class="onboarding-step-done">✓ Done</span>';
+    html += '</div>';
+    if (!step.check()) html += `<button class="onboard-btn" id="onboard-suggest-btn">Try: ${step.suggest}</button>`;
+    if (this.current > 0) html += `<button class="onboard-btn" id="onboard-prev-btn">Back</button>`;
+    if (step.check() && this.current < this.steps.length - 1) html += `<button class="onboard-btn" id="onboard-next-btn">Next</button>`;
+    if (step.check() && this.current === this.steps.length - 1) html += `<div style="margin-top:12px;font-weight:600;color:var(--success)">🎉 Tutorial complete! You\'ve learned the basics of git.</div>`;
+    this.panelEl.innerHTML = html;
+    const suggestBtn = document.getElementById('onboard-suggest-btn');
+    if (suggestBtn) suggestBtn.addEventListener('click', this._boundOnSuggest);
+    const nextBtn = document.getElementById('onboard-next-btn');
+    if (nextBtn) nextBtn.addEventListener('click', () => { this.current++; this.render(); });
+    const prevBtn = document.getElementById('onboard-prev-btn');
+    if (prevBtn) prevBtn.addEventListener('click', () => { this.current--; this.render(); });
+  }
+
+  onInput() {
+    // Re-render if step is completed
+    if (this.steps[this.current].check()) {
+      setTimeout(() => this.render(), 200);
+    }
+  }
+
+  onSuggest() {
+    const step = this.steps[this.current];
+    this.runCommand(step.suggest);
+    setTimeout(() => this.render(), 400);
+  }
+}
 
   function _handleCommand(raw) {
     Terminal.printCommand(raw);
