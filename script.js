@@ -656,15 +656,15 @@ const GraphRenderer = (() => {
     tagsHere.forEach(name => { _badge(g, x, labelY, `🏷 ${name}`, 'var(--warning)', 'var(--bg-elevated)', 'var(--warning)'); labelY -= 20; });
 
     // SHA + message below
-    g.appendChild(_svgEl('text', { x, y: y+NODE_R+14, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '9.5', fill: 'var(--text-muted)' }, sha.slice(0,7)));
+    g.appendChild(_svgEl('text', { x, y: y+NODE_R+16, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '11', fill: 'var(--text-muted)' }, sha.slice(0,7)));
     const msg = commit.message.length > 22 ? commit.message.slice(0,21)+'…' : commit.message;
-    g.appendChild(_svgEl('text', { x, y: y+NODE_R+27, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '9.5', fill: 'var(--text-secondary)' }, msg));
+    g.appendChild(_svgEl('text', { x, y: y+NODE_R+30, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '11', fill: 'var(--text-secondary)' }, msg));
   }
 
   function _badge(g, cx, cy, text, fg, bg, border) {
-    const w = text.length * 6.2 + 12, h = 15;
+    const w = text.length * 7 + 14, h = 17;
     g.appendChild(_svgEl('rect', { x: cx-w/2, y: cy-h/2, width: w, height: h, rx: 3, ry: 3, fill: bg, stroke: border, 'stroke-width': '1' }));
-    g.appendChild(_svgEl('text', { x: cx, y: cy+4.5, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '9', 'font-weight': '600', fill: fg }, text));
+    g.appendChild(_svgEl('text', { x: cx, y: cy+5.5, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '10.5', 'font-weight': '600', fill: fg }, text));
   }
 
   return { render, setScale, getScale, onNodeClick };
