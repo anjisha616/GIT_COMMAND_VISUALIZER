@@ -281,6 +281,134 @@ const GitState = (() => {
     return current;
   }
 
+  function assertValidState() {
+    // HEAD must be valid
+    if (_detached) {
+      if (!_commits[_HEAD]) throw new Error('Detached HEAD points to invalid commit');
+    } else {
+      if (!_branches[_HEAD]) throw new Error('HEAD branch does not exist');
+      if (_branches[_HEAD] && !_commits[_branches[_HEAD]]) throw new Error('HEAD branch points to invalid commit');
+    }
+    // Branches must point to valid commits
+    for (const name in _branches) {
+      if (_branches[name] && !_commits[_branches[name]]) throw new Error(`Branch '${name}' points to invalid commit`);
+    }
+    // No orphaned commits (every commit except root must have valid parents)
+    for (const sha in _commits) {
+      const c = _commits[sha];
+      if (c.parents.length) {
+        c.parents.forEach(p => {
+          if (!_commits[p]) throw new Error(`Commit '${sha}' has orphaned parent '${p}'`);
+        });
+      }
+    }
+  }
+
+  // Wrap all mutations with assertValidState
+  const _orig_commit = commit;
+  commit = function(message) {
+    assertValidState();
+    const result = _orig_commit.call(this, message);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_branch = branch;
+  branch = function(name) {
+    assertValidState();
+    const result = _orig_branch.call(this, name);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_checkout = checkout;
+  checkout = function(target) {
+    assertValidState();
+    const result = _orig_checkout.call(this, target);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_checkoutNewBranch = checkoutNewBranch;
+  checkoutNewBranch = function(name) {
+    assertValidState();
+    const result = _orig_checkoutNewBranch.call(this, name);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_merge = merge;
+  merge = function(sourceBranch) {
+    assertValidState();
+    const result = _orig_merge.call(this, sourceBranch);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_rebase = rebase;
+  rebase = function(targetBranch) {
+    assertValidState();
+    const result = _orig_rebase.call(this, targetBranch);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_cherryPick = cherryPick;
+  cherryPick = function(sha) {
+    assertValidState();
+    const result = _orig_cherryPick.call(this, sha);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_resetHard = resetHard;
+  resetHard = function(target) {
+    assertValidState();
+    const result = _orig_resetHard.call(this, target);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_stash = stash;
+  stash = function() {
+    assertValidState();
+    const result = _orig_stash.call(this);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_stashPop = stashPop;
+  stashPop = function() {
+    assertValidState();
+    const result = _orig_stashPop.call(this);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_tag = tag;
+  tag = function(name, target) {
+    assertValidState();
+    const result = _orig_tag.call(this, name, target);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_push = push;
+  push = function(branchName) {
+    assertValidState();
+    const result = _orig_push.call(this, branchName);
+    assertValidState();
+    return result;
+  };
+
+  const _orig_pull = pull;
+  pull = function(branchName) {
+    assertValidState();
+    const result = _orig_pull.call(this, branchName);
+    assertValidState();
+    return result;
+  };
+
   return { isInitialized, init, commit, branch, checkout, checkoutNewBranch, merge, rebase, cherryPick, resetHard, stash, stashPop, tag, log, status, getBranchList, getCommit, push, pull, snapshot };
 
 })();
