@@ -303,6 +303,33 @@ const CommandParser = (() => {
     ],
 
     git: (args) => {
+            // git diff <branchA> <branchB> — show commits on A not in B and vice versa
+            if (args[0] === 'diff' && args.length >= 3) {
+              const [_, branchA, branchB] = args;
+              if (!branchA || !branchB) return [out.error('usage: git diff <branchA> <branchB>')];
+              try {
+                const branches = GitState.getBranchList();
+                const shaA = branches.find(b => b.name === branchA)?.sha;
+                const shaB = branches.find(b => b.name === branchB)?.sha;
+                if (!shaA) return [out.error(`Branch '${branchA}' not found`)];
+                if (!shaB) return [out.error(`Branch '${branchB}' not found`)];
+                // Find commits reachable from A but not B
+                const ancestorsA = GitState._getAllAncestors ? GitState._getAllAncestors(shaA) : (window._getAllAncestors ? window._getAllAncestors(shaA) : new Set());
+                const ancestorsB = GitState._getAllAncestors ? GitState._getAllAncestors(shaB) : (window._getAllAncestors ? window._getAllAncestors(shaB) : new Set());
+                const onlyA = [...ancestorsA].filter(x => !ancestorsB.has(x));
+                const onlyB = [...ancestorsB].filter(x => !ancestorsA.has(x));
+                const commits = GitState.snapshot().commits;
+                let lines = [];
+                lines.push(out.info(`Commits on ${branchA} not in ${branchB}:`));
+                if (onlyA.length === 0) lines.push(out.muted('  (none)'));
+                else onlyA.forEach(sha => lines.push(out.code(`  ${sha}  ${commits[sha]?.message || ''}`)));
+                lines.push(out.spacer());
+                lines.push(out.info(`Commits on ${branchB} not in ${branchA}:`));
+                if (onlyB.length === 0) lines.push(out.muted('  (none)'));
+                else onlyB.forEach(sha => lines.push(out.code(`  ${sha}  ${commits[sha]?.message || ''}`)));
+                return lines;
+              } catch (e) { return [out.error(`error: ${e.message}`)]; }
+            }
       const sub = args[0];
       if (!sub) return [out.error('git: command required. Try `help`.')];
 
