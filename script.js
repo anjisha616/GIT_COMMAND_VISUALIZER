@@ -944,8 +944,15 @@ const App = (() => {
     const tutorialBtn = document.getElementById('start-tutorial-btn');
     if (tutorialBtn) {
       tutorialBtn.addEventListener('click', () => {
-        _onboarding = new Onboarding(document.getElementById('onboarding-panel'), _handleCommand, () => _rerender());
+        console.log('[DEBUG] Start Tutorial button clicked');
+        const panel = document.getElementById('onboarding-panel');
+        if (!panel) {
+          console.error('[DEBUG] Onboarding panel not found!');
+        }
+        _onboarding = new Onboarding(panel, _handleCommand, () => _rerender());
+        console.log('[DEBUG] Onboarding instance created:', _onboarding);
         _onboarding.start();
+        console.log('[DEBUG] Onboarding started, panel display:', panel.style.display);
       });
     }
 
@@ -1017,9 +1024,11 @@ class Onboarding {
   }
 
   start() {
+    console.log('[DEBUG] Onboarding.start() called');
     this.panelEl.style.display = '';
     this.current = 0;
     this.render();
+    console.log('[DEBUG] Onboarding panel should now be visible.');
   }
 
   render() {
@@ -1034,6 +1043,7 @@ class Onboarding {
     if (step.check() && this.current < this.steps.length - 1) html += `<button class="onboard-btn" id="onboard-next-btn">Next</button>`;
     if (step.check() && this.current === this.steps.length - 1) html += `<div style="margin-top:12px;font-weight:600;color:var(--success)">🎉 Tutorial complete! You\'ve learned the basics of git.</div>`;
     this.panelEl.innerHTML = html;
+    console.log('[DEBUG] Onboarding.render() called, current step:', this.current, 'panelEl:', this.panelEl);
     const suggestBtn = document.getElementById('onboard-suggest-btn');
     if (suggestBtn) suggestBtn.addEventListener('click', this._boundOnSuggest);
     const nextBtn = document.getElementById('onboard-next-btn');
