@@ -86,8 +86,16 @@ const GitState = (() => {
 
   function checkout(target) {
     if (!_initialized) throw new Error('not a git repository');
-    if (_branches[target] !== undefined) { _HEAD = target; _detached = false; return { type: 'branch', name: target }; }
-    if (_commits[target]) { _HEAD = target; _detached = true; return { type: 'detached', sha: target }; }
+    if (_branches[target] !== undefined) {
+      _HEAD = target; _detached = false;
+      EventBus.emit('head_changed', { type: 'branch', name: target });
+      return { type: 'branch', name: target };
+    }
+    if (_commits[target]) {
+      _HEAD = target; _detached = true;
+      EventBus.emit('head_changed', { type: 'detached', sha: target });
+      return { type: 'detached', sha: target };
+    }
     throw new Error(`pathspec '${target}' did not match any known branch or commit`);
   }
 
