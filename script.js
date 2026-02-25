@@ -411,13 +411,14 @@ const CommandParser = (() => {
         merge: (rest) => {
           _req();
           const source = rest[0];
-          if (!source) return [out.error('error: branch name required — git merge <branch>')];
+          if (!source) return [out.error('error: branch to merge required')];
+          if (source === GitState.status().branch) return [out.error('cannot merge a branch into itself')];
           try {
-            const r = GitState.merge(source);
-            if (r.type === 'already-up-to-date') return [out.info('Already up to date.')];
-            if (r.type === 'fast-forward') return [out.success('Fast-forward'), out.muted(`HEAD -> ${r.sha.slice(0,7)}`)];
-            const s = GitState.status();
-            return [out.success(`Merge made by the 'ort' strategy.`), out.muted(`[${s.branch} ${r.sha.slice(0,7)}] Merge branch '${source}'`)];
+            const result = GitState.merge(source);
+            if (result.type === 'already-up-to-date') return [out.info('Already up-to-date')];
+            if (result.type === 'fast-forward') return [out.success(`Fast-forward merge: ${source} → ${GitState.status().branch}`)];
+            if (result.type === 'merge') return [out.success(`Merged branch '${source}' into ${GitState.status().branch}`)];
+            return [out.info('Merge result: ' + JSON.stringify(result))];
           } catch (e) { return [out.error(`error: ${e.message}`)]; }
         },
 
