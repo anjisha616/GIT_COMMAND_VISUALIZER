@@ -8,6 +8,27 @@
 'use strict';
 
 /* ============================================================
+   SECTION 0 — EVENT BUS
+   ============================================================ */
+
+const EventBus = (() => {
+  const listeners = {};
+  return {
+    emit(event, data) {
+      (listeners[event] || []).forEach(fn => fn(data));
+    },
+    on(event, fn) {
+      listeners[event] = listeners[event] || [];
+      listeners[event].push(fn);
+    },
+    off(event, fn) {
+      if (!listeners[event]) return;
+      listeners[event] = listeners[event].filter(f => f !== fn);
+    }
+  };
+})();
+
+/* ============================================================
    SECTION 1 — GIT STATE ENGINE
    ============================================================ */
 
@@ -49,6 +70,7 @@ const GitState = (() => {
     const sha = _sha(), parent = _currentSha();
     _commits[sha] = { sha, message, parents: parent ? [parent] : [], timestamp: Date.now(), branch: _detached ? null : _HEAD };
     if (_detached) _HEAD = sha; else _branches[_HEAD] = sha;
+    EventBus.emit('commit_created', _commits[sha]);
     return sha;
   }
 
@@ -58,6 +80,7 @@ const GitState = (() => {
     const current = _currentSha();
     if (!current) throw new Error('cannot create branch: no commits yet');
     _branches[name] = current;
+    EventBus.emit('branch_created', { name, sha: current });
     return name;
   }
 
@@ -88,6 +111,7 @@ const GitState = (() => {
     const sha = _sha();
     _commits[sha] = { sha, message: `Merge branch '${sourceBranch}' into ${_HEAD}`, parents: [currentSha, sourceSha], timestamp: Date.now(), branch: _HEAD, isMerge: true };
     _branches[_HEAD] = sha;
+    EventBus.emit('merge_created', _commits[sha]);
     return { type: 'merge', sha };
   }
 
@@ -106,6 +130,7 @@ const GitState = (() => {
     toReplay.forEach(oldCommit => {
       const newSha = _sha();
       _commits[newSha] = { sha: newSha, message: oldCommit.message, parents: [base], timestamp: Date.now(), branch: _HEAD, rebased: true, originalSha: oldCommit.sha };
+      EventBus.emit('rebase_commit_created', _commits[newSha]);
       base = newSha;
     });
     _branches[_HEAD] = base;
@@ -113,13 +138,13 @@ const GitState = (() => {
   }
 
   function cherryPick(sha) {
-    if (!_initialized) throw new Error('not a git repository');
     let match = _commits[sha] ? sha : Object.keys(_commits).find(s => s.startsWith(sha));
     if (!match) throw new Error(`bad revision '${sha}'`);
     const source = _commits[match], currentSha = _currentSha();
     if (!currentSha) throw new Error('cannot cherry-pick: no commits on current branch');
     const newSha = _sha();
     _commits[newSha] = { sha: newSha, message: source.message, parents: [currentSha], timestamp: Date.now(), branch: _detached ? null : _HEAD, cherryPicked: true, originalSha: match };
+    EventBus.emit('cherry_pick_created', _commits[newSha]);
     if (_detached) _HEAD = newSha; else _branches[_HEAD] = newSha;
     return { sha: newSha, original: match, message: source.message };
   }
