@@ -489,18 +489,40 @@ const GraphRenderer = (() => {
     const maxRow = Math.max(...Object.values(layout.nodes).map(n => n.row), 0);
     const maxCol = Math.max(...Object.values(layout.nodes).map(n => n.col), 0);
 
-    const svgW = (PAD_X * 2 + (maxCol + 1) * COL_W) * _scale;
-    const svgH = (PAD_TOP + (maxRow + 1) * ROW_H + PAD_BOTTOM) * _scale;
-
-    svgEl.setAttribute('width',  Math.max(svgW, 200));
-    svgEl.setAttribute('height', Math.max(svgH, 200));
+    // Center graph horizontally/vertically for small graphs
+    let svgW = (PAD_X * 2 + (maxCol + 1) * COL_W) * _scale;
+    let svgH = (PAD_TOP + (maxRow + 1) * ROW_H + PAD_BOTTOM) * _scale;
+    const minW = 600, minH = 350;
+    if (svgW < minW) svgW = minW;
+    if (svgH < minH) svgH = minH;
+    svgEl.setAttribute('width', svgW);
+    svgEl.setAttribute('height', svgH);
     svgEl.innerHTML = '';
 
-    const g = _svgEl('g', { transform: `scale(${_scale})` });
+    // Calculate centering offset
+    const nodeXs = Object.values(layout.nodes).map(n => PAD_X + n.col * COL_W);
+    const nodeYs = Object.values(layout.nodes).map(n => PAD_TOP + n.row * ROW_H);
+    const centerX = svgW / 2;
+    const centerY = svgH / 2;
+    let offsetX = 0, offsetY = 0;
+    if (nodeXs.length > 0) {
+      const avgX = nodeXs.reduce((a,b) => a+b, 0) / nodeXs.length;
+      offsetX = centerX - avgX;
+    }
+    if (nodeYs.length > 0) {
+      const avgY = nodeYs.reduce((a,b) => a+b, 0) / nodeYs.length;
+      offsetY = centerY - avgY;
+    }
+
+    const g = _svgEl('g', { transform: `scale(${_scale}) translate(${offsetX/_scale},${offsetY/_scale})` });
     svgEl.appendChild(g);
 
     const rowToY = row => PAD_TOP + row * ROW_H;
-    const colToX = col => PAD_X  + col * COL_W;
+    // Increase column width for branch spacing if only a few branches
+    const colToX = col => {
+      if (maxCol <= 1) return PAD_X + col * (COL_W + 60); // extra spacing for 2 branches
+      return PAD_X + col * COL_W;
+    };
 
     // Position nodes
     Object.values(layout.nodes).forEach(n => { n.px = colToX(n.col); n.py = rowToY(n.row); });
