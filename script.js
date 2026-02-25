@@ -1089,6 +1089,27 @@ class Onboarding {
 }
 
   function _handleCommand(raw) {
+    // Command explainer logic
+    let explainer = '';
+    if (raw.trim().startsWith('git ')) {
+      const cmd = raw.trim().split(' ')[1];
+      switch (cmd) {
+        case 'init': explainer = 'Initialize a new git repository.'; break;
+        case 'commit': explainer = 'Record changes to the repository.'; break;
+        case 'branch': explainer = 'Create, list, or manage branches.'; break;
+        case 'checkout': explainer = 'Switch branches or restore files.'; break;
+        case 'merge': explainer = 'Merge a branch into the current branch.'; break;
+        case 'rebase': explainer = 'Replay commits from one branch onto another.'; break;
+        case 'cherry-pick': explainer = 'Apply a commit from another branch.'; break;
+        case 'reset': explainer = 'Reset current branch to a specific commit.'; break;
+        case 'stash': explainer = 'Save and restore working state.'; break;
+        case 'tag': explainer = 'Create a lightweight tag.'; break;
+        case 'log': explainer = 'Show commit history.'; break;
+        case 'status': explainer = 'Show HEAD info and branch status.'; break;
+        default: explainer = '';
+      }
+    }
+    if (explainer) Terminal.printLines([{ text: explainer, cls: 'info' }, { spacer: true }]);
     Terminal.printCommand(raw);
     const lines = CommandParser.parse(raw);
     if (lines.some(l => l.special === 'clear')) Terminal.clear();
