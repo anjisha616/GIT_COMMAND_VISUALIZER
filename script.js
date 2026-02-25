@@ -981,8 +981,11 @@ const Terminal = (() => {
       if (_hi > 0) { _hi--; _in.value = _history[_hi] || ''; } else { _hi = -1; _in.value = ''; }
       return;
     }
-    if (e.key === 'Tab')             { e.preventDefault(); _autocomplete(); return; }
-    if (e.key === 'l' && e.ctrlKey)  { e.preventDefault(); clear(); return; }
+    // Ctrl+H to show history
+    if (e.ctrlKey && e.key.toLowerCase() === 'h') {
+      showHistory();
+      return;
+    }
   }
 
   function _autocomplete() {
