@@ -1,12 +1,8 @@
 /* ============================================================
-   GIT VISUALIZER — script.js  (v2)
-   Improvements over v1:
-     1. Graph: newest commits at TOP, proper upward growth
-     2. Edges: bezier curves, branch lane guides
-     3. Click-on-node commit detail panel
-     4. git rebase + git cherry-pick commands
-     5. Sandbox scenarios panel (preloaded workflows)
-     6. Terminal: visual separator between command groups
+   GIT VISUALIZER — script.js  (v3)
+   New in v3:
+     7. git push / git pull — remote origin simulation
+        origin/ badges appear on the graph in red
    ============================================================ */
 
 'use strict';
@@ -24,6 +20,7 @@ const GitState = (() => {
   let _detached    = false;
   let _stash       = [];
   let _tags        = {};
+  let _remote      = {};   // NEW: { branchName: sha } — simulates origin
 
   function _sha() { return Math.random().toString(16).slice(2, 9); }
 
@@ -44,7 +41,7 @@ const GitState = (() => {
   function init() {
     _initialized = true;
     _commits = {}; _branches = { master: null };
-    _HEAD = 'master'; _detached = false; _stash = []; _tags = {};
+    _HEAD = 'master'; _detached = false; _stash = []; _tags = {}; _remote = {};
   }
 
   function commit(message) {
@@ -192,8 +189,43 @@ const GitState = (() => {
     const m = Object.keys(_commits).find(s => s.startsWith(sha)); return m ? _commits[m] : null;
   }
 
+  // NEW: push — records current branch SHA to remote
+  function push(branchName) {
+    if (!_initialized) throw new Error('not a git repository');
+    const name = branchName || (!_detached ? _HEAD : null);
+    if (!name) throw new Error('cannot push in detached HEAD state');
+    if (_branches[name] === undefined) throw new Error(`branch '${name}' not found`);
+    const sha = _branches[name];
+    if (!sha) throw new Error(`branch '${name}' has no commits to push`);
+    const prev = _remote[name];
+    _remote[name] = sha;
+    return { branch: name, sha, isNew: prev === undefined, wasUpToDate: prev === sha };
+  }
+
+  // NEW: pull — fast-forwards local branch to what origin has
+  function pull(branchName) {
+    if (!_initialized) throw new Error('not a git repository');
+    const name = branchName || (!_detached ? _HEAD : null);
+    if (!name) throw new Error('cannot pull in detached HEAD state');
+    if (!_remote[name]) throw new Error(`no remote tracking branch for '${name}' — run git push first`);
+    const remoteSha = _remote[name];
+    const localSha  = _branches[name];
+    if (remoteSha === localSha) return { type: 'up-to-date', branch: name };
+    _branches[name] = remoteSha;
+    return { type: 'fast-forward', branch: name, sha: remoteSha };
+  }
+
   function snapshot() {
-    return { initialized: _initialized, commits: JSON.parse(JSON.stringify(_commits)), branches: JSON.parse(JSON.stringify(_branches)), tags: JSON.parse(JSON.stringify(_tags)), HEAD: _HEAD, detached: _detached, branchColor: _branchColor };
+    return {
+      initialized: _initialized,
+      commits:     JSON.parse(JSON.stringify(_commits)),
+      branches:    JSON.parse(JSON.stringify(_branches)),
+      tags:        JSON.parse(JSON.stringify(_tags)),
+      remote:      JSON.parse(JSON.stringify(_remote)),   // NEW: expose remote
+      HEAD:        _HEAD,
+      detached:    _detached,
+      branchColor: _branchColor,
+    };
   }
 
   function _isAncestor(ancestor, descendant) {
@@ -224,7 +256,7 @@ const GitState = (() => {
     return current;
   }
 
-  return { isInitialized, init, commit, branch, checkout, checkoutNewBranch, merge, rebase, cherryPick, resetHard, stash, stashPop, tag, log, status, getBranchList, getCommit, snapshot };
+  return { isInitialized, init, commit, branch, checkout, checkoutNewBranch, merge, rebase, cherryPick, resetHard, stash, stashPop, tag, log, status, getBranchList, getCommit, push, pull, snapshot };
 
 })();
 
@@ -251,21 +283,23 @@ const CommandParser = (() => {
     help: () => [
       out.line('Supported commands:'),
       out.spacer(),
-      out.code('  git init'),                     out.muted('    Initialize a new repository'),
-      out.code('  git commit -m "<msg>"'),         out.muted('    Record changes'),
-      out.code('  git branch <n>'),               out.muted('    Create a branch'),
-      out.code('  git branch -a'),                out.muted('    List all branches'),
-      out.code('  git checkout <branch|sha>'),    out.muted('    Switch branches or detach HEAD'),
-      out.code('  git checkout -b <branch>'),     out.muted('    Create + switch to new branch'),
-      out.code('  git merge <branch>'),           out.muted('    Merge a branch into HEAD'),
-      out.code('  git rebase <branch>'),          out.muted('    Replay commits on another branch'),
-      out.code('  git cherry-pick <sha>'),        out.muted('    Copy a commit onto current branch'),
-      out.code('  git reset --hard <SHA|HEAD~N>'),out.muted('    Reset current branch'),
-      out.code('  git stash / git stash pop'),    out.muted('    Save and restore working state'),
-      out.code('  git tag <n> [sha]'),            out.muted('    Create a lightweight tag'),
-      out.code('  git log'),                      out.muted('    Show commit history'),
-      out.code('  git status'),                   out.muted('    Show HEAD info'),
-      out.code('  clear'),                        out.muted('    Clear terminal output'),
+      out.code('  git init'),                      out.muted('    Initialize a new repository'),
+      out.code('  git commit -m "<msg>"'),          out.muted('    Record changes'),
+      out.code('  git branch <n>'),                out.muted('    Create a branch'),
+      out.code('  git branch -a'),                 out.muted('    List all branches'),
+      out.code('  git checkout <branch|sha>'),     out.muted('    Switch branches or detach HEAD'),
+      out.code('  git checkout -b <branch>'),      out.muted('    Create + switch to new branch'),
+      out.code('  git merge <branch>'),            out.muted('    Merge a branch into HEAD'),
+      out.code('  git rebase <branch>'),           out.muted('    Replay commits on another branch'),
+      out.code('  git cherry-pick <sha>'),         out.muted('    Copy a commit onto current branch'),
+      out.code('  git reset --hard <SHA|HEAD~N>'), out.muted('    Reset current branch'),
+      out.code('  git stash / git stash pop'),     out.muted('    Save and restore working state'),
+      out.code('  git tag <n> [sha]'),             out.muted('    Create a lightweight tag'),
+      out.code('  git log / git log --graph'),     out.muted('    Show commit history'),
+      out.code('  git status'),                    out.muted('    Show HEAD info'),
+      out.code('  git push [branch]'),             out.muted('    Push branch to origin (shows on graph)'),
+      out.code('  git pull [branch]'),             out.muted('    Pull from origin into local branch'),
+      out.code('  clear'),                         out.muted('    Clear terminal output'),
     ],
 
     git: (args) => {
@@ -390,20 +424,14 @@ const CommandParser = (() => {
 
         log: (rest) => {
           _req();
-          // Support git log --graph
           if (rest[0] === '--graph') {
             try {
               const entries = GitState.log(20);
               if (!entries.length) return [out.muted('No commits yet.')];
-              // Build a simple ASCII graph
               let graphLines = [];
               for (let i = 0; i < entries.length; i++) {
                 const c = entries[i];
-                // Show merge lines if parents > 1
-                let graph = '|';
-                if (c.parents.length > 1) graph = '*─┬';
-                else if (i === 0) graph = '*';
-                else graph = '|';
+                let graph = c.parents.length > 1 ? '*─┬' : (i === 0 ? '*' : '|');
                 const d = new Date(c.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 graphLines.push(out.code(`${graph} commit ${c.sha}`));
                 graphLines.push(out.line(`    ${c.message}`));
@@ -413,7 +441,6 @@ const CommandParser = (() => {
               return graphLines;
             } catch (e) { return [out.error(`error: ${e.message}`)]; }
           }
-          // Default log
           const limit = parseInt(rest[0]) || 10;
           try {
             const entries = GitState.log(limit);
@@ -434,6 +461,44 @@ const CommandParser = (() => {
             if (!s.sha) lines.push(out.muted('No commits yet'));
             if (s.stashCount > 0) lines.push(out.muted(`Stash entries: ${s.stashCount}`));
             return lines;
+          } catch (e) { return [out.error(`error: ${e.message}`)]; }
+        },
+
+        // NEW: git push [branch]
+        push: (rest) => {
+          _req();
+          const branchArg = rest.find(r => r !== 'origin') || null;
+          try {
+            const r = GitState.push(branchArg);
+            if (r.wasUpToDate) return [
+              out.info('Everything up-to-date'),
+              out.muted(`origin/${r.branch} is already at ${r.sha.slice(0,7)}`),
+            ];
+            const verb = r.isNew ? 'new branch' : 'updated';
+            return [
+              out.success(`To origin`),
+              out.success(`  ${r.isNew ? '*' : ' '} [${verb}]  ${r.branch} -> origin/${r.branch}`),
+              out.muted(`  ${r.sha.slice(0,7)}`),
+              out.info(`origin/${r.branch} badge now visible on the graph ↑`),
+            ];
+          } catch (e) { return [out.error(`error: ${e.message}`)]; }
+        },
+
+        // NEW: git pull [branch]
+        pull: (rest) => {
+          _req();
+          const branchArg = rest.find(r => r !== 'origin') || null;
+          try {
+            const r = GitState.pull(branchArg);
+            if (r.type === 'up-to-date') return [
+              out.info('Already up to date.'),
+              out.muted(`Local ${r.branch} matches origin/${r.branch}`),
+            ];
+            return [
+              out.success(`Fast-forward`),
+              out.muted(`  origin/${r.branch} -> ${r.branch}`),
+              out.muted(`  ${r.sha.slice(0,7)}`),
+            ];
           } catch (e) { return [out.error(`error: ${e.message}`)]; }
         },
       };
@@ -477,8 +542,7 @@ const CommandParser = (() => {
 
 /* ============================================================
    SECTION 3 — GRAPH RENDERER
-   FIX 1: newest commits at TOP
-   FIX 2: bezier edges + lane guides
+   NEW: renders origin/ badges in red when remote tracking exists
    ============================================================ */
 
 const GraphRenderer = (() => {
@@ -499,7 +563,8 @@ const GraphRenderer = (() => {
   function onNodeClick(cb) { _onNodeClick = cb; }
 
   function render(snapshot, svgEl, emptyEl, legendEl) {
-    const { initialized, commits, branches, tags, HEAD, detached, branchColor } = snapshot;
+    // NEW: destructure remote from snapshot
+    const { initialized, commits, branches, tags, HEAD, detached, branchColor, remote } = snapshot;
     const hasCommits = Object.keys(commits).length > 0;
 
     emptyEl.style.display = (initialized && hasCommits) ? 'none' : 'flex';
@@ -513,50 +578,33 @@ const GraphRenderer = (() => {
     const maxRow = Math.max(...Object.values(layout.nodes).map(n => n.row), 0);
     const maxCol = Math.max(...Object.values(layout.nodes).map(n => n.col), 0);
 
-    // Center graph horizontally/vertically for small graphs
     let svgW = (PAD_X * 2 + (maxCol + 1) * COL_W) * _scale;
     let svgH = (PAD_TOP + (maxRow + 1) * ROW_H + PAD_BOTTOM) * _scale;
-    const minW = 600, minH = 350;
-    if (svgW < minW) svgW = minW;
-    if (svgH < minH) svgH = minH;
+    if (svgW < 600) svgW = 600;
+    if (svgH < 350) svgH = 350;
     svgEl.setAttribute('width', svgW);
     svgEl.setAttribute('height', svgH);
     svgEl.innerHTML = '';
 
-    // Calculate centering offset
     const nodeXs = Object.values(layout.nodes).map(n => PAD_X + n.col * COL_W);
     const nodeYs = Object.values(layout.nodes).map(n => PAD_TOP + n.row * ROW_H);
-    const centerX = svgW / 2;
-    const centerY = svgH / 2;
+    const centerX = svgW / 2, centerY = svgH / 2;
     let offsetX = 0, offsetY = 0;
-    if (nodeXs.length > 0) {
-      const avgX = nodeXs.reduce((a,b) => a+b, 0) / nodeXs.length;
-      offsetX = centerX - avgX;
-    }
-    if (nodeYs.length > 0) {
-      const avgY = nodeYs.reduce((a,b) => a+b, 0) / nodeYs.length;
-      offsetY = centerY - avgY;
-    }
+    if (nodeXs.length > 0) offsetX = centerX - nodeXs.reduce((a,b) => a+b, 0) / nodeXs.length;
+    if (nodeYs.length > 0) offsetY = centerY - nodeYs.reduce((a,b) => a+b, 0) / nodeYs.length;
 
     const g = _svgEl('g', { transform: `scale(${_scale}) translate(${offsetX/_scale},${offsetY/_scale})` });
     svgEl.appendChild(g);
 
     const rowToY = row => PAD_TOP + row * ROW_H;
-    // Increase column width for branch spacing if only a few branches
-    const colToX = col => {
-      if (maxCol <= 1) return PAD_X + col * (COL_W + 60); // extra spacing for 2 branches
-      return PAD_X + col * COL_W;
-    };
+    const colToX = col => maxCol <= 1 ? PAD_X + col * (COL_W + 60) : PAD_X + col * COL_W;
 
-    // Position nodes
     Object.values(layout.nodes).forEach(n => { n.px = colToX(n.col); n.py = rowToY(n.row); });
 
-    // Lane guides
     _drawLanes(g, layout.nodes, maxRow, rowToY);
-    // Edges
     layout.edges.forEach(e => _drawEdge(g, e, layout.nodes));
-    // Nodes
-    Object.values(layout.nodes).forEach(n => _drawNode(g, n, commits[n.sha], branches, tags, HEAD, detached, branchColor));
+    // NEW: pass remote into _drawNode
+    Object.values(layout.nodes).forEach(n => _drawNode(g, n, commits[n.sha], branches, tags, remote || {}, HEAD, detached, branchColor));
   }
 
   function _drawLanes(g, nodes, maxRow, rowToY) {
@@ -586,7 +634,7 @@ const GraphRenderer = (() => {
       nodes[sha] = {
         sha,
         col:     colMap[sha] ?? 0,
-        row:     maxDepth - depth[sha],    // FIX 1: flipped — newest = row 0 = top
+        row:     maxDepth - depth[sha],
         color:   _resolveColor(sha, commits, branches, branchColor),
         isHead:  detached ? HEAD === sha : branches[HEAD] === sha,
         isMerge: commits[sha].parents.length > 1,
@@ -643,7 +691,6 @@ const GraphRenderer = (() => {
     const from = nodes[edge.from], to = nodes[edge.to];
     if (!from || !to) return;
     const x1 = from.px, y1 = from.py, x2 = to.px, y2 = to.py;
-    // FIX 2: S-curve bezier for cross-lane edges
     const d = Math.abs(x1 - x2) < 2
       ? `M ${x1} ${y1} L ${x2} ${y2}`
       : `M ${x1} ${y1} C ${x1} ${y1 + (y2-y1)*0.45}, ${x2} ${y1 + (y2-y1)*0.55}, ${x2} ${y2}`;
@@ -656,13 +703,12 @@ const GraphRenderer = (() => {
     }));
   }
 
-  function _drawNode(g, node, commit, branches, tags, HEAD, detached, branchColor) {
+  // NEW: accepts remote param, renders origin/ badges
+  function _drawNode(g, node, commit, branches, tags, remote, HEAD, detached, branchColor) {
     const { px: x, py: y, sha, color, isHead, isMerge } = node;
 
-    // Shadow
     g.appendChild(_svgEl('circle', { cx: x+1, cy: y+1, r: NODE_R+1, fill: 'rgba(0,0,0,0.5)' }));
 
-    // Circle
     const circle = _svgEl('circle', {
       cx: x, cy: y, r: NODE_R,
       fill: color,
@@ -676,32 +722,36 @@ const GraphRenderer = (() => {
     circle.addEventListener('mouseleave', () => circle.setAttribute('r', NODE_R));
     g.appendChild(circle);
 
-    // Merge ring
     if (isMerge) g.appendChild(_svgEl('circle', { cx: x, cy: y, r: NODE_R-4, fill: 'none', stroke: 'rgba(255,255,255,0.3)', 'stroke-width': '1.2' }));
 
-    // Cherry-pick / rebase dot
     if (commit.cherryPicked || commit.rebased) {
       g.appendChild(_svgEl('circle', { cx: x+NODE_R-2, cy: y-NODE_R+2, r: 4, fill: commit.cherryPicked ? 'var(--branch-3)' : 'var(--branch-2)', stroke: 'var(--bg-base)', 'stroke-width': '1.5' }));
     }
 
-    // Labels above
     let labelY = y - NODE_R - LABEL_GAP;
     const branchesHere = Object.entries(branches).filter(([,s]) => s === sha).map(([n]) => n);
     const tagsHere     = Object.entries(tags).filter(([,s]) => s === sha).map(([n]) => n);
+    // NEW: find which remote tracking refs point to this commit
+    const remoteHere   = Object.entries(remote).filter(([,s]) => s === sha).map(([n]) => `origin/${n}`);
 
-    if (detached && HEAD === sha) { _badge(g, x, labelY, 'HEAD', '#fff', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.3)'); labelY -= 20; }
+    if (detached && HEAD === sha) { _badge(g, x, labelY, 'HEAD', '#fff', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.3)'); labelY -= 22; }
 
     branchesHere.forEach(name => {
       const isCurrent = !detached && name === HEAD;
       const bc = `var(${branchColor(name)})`;
-      if (isCurrent) { _badge(g, x, labelY, 'HEAD →', '#fff', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.25)'); labelY -= 20; }
+      if (isCurrent) { _badge(g, x, labelY, 'HEAD →', '#fff', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.25)'); labelY -= 22; }
       _badge(g, x, labelY, name, isCurrent ? '#0d1117' : bc, isCurrent ? bc : 'var(--bg-elevated)', bc);
-      labelY -= 20;
+      labelY -= 22;
     });
 
-    tagsHere.forEach(name => { _badge(g, x, labelY, `🏷 ${name}`, 'var(--warning)', 'var(--bg-elevated)', 'var(--warning)'); labelY -= 20; });
+    // NEW: render origin/ badges in red, like real git log
+    remoteHere.forEach(name => {
+      _badge(g, x, labelY, name, '#ff7b72', 'rgba(255,123,114,0.12)', 'rgba(255,123,114,0.5)');
+      labelY -= 22;
+    });
 
-    // SHA + message below
+    tagsHere.forEach(name => { _badge(g, x, labelY, `🏷 ${name}`, 'var(--warning)', 'var(--bg-elevated)', 'var(--warning)'); labelY -= 22; });
+
     g.appendChild(_svgEl('text', { x, y: y+NODE_R+16, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '11', fill: 'var(--text-muted)' }, sha.slice(0,7)));
     const msg = commit.message.length > 22 ? commit.message.slice(0,21)+'…' : commit.message;
     g.appendChild(_svgEl('text', { x, y: y+NODE_R+30, 'text-anchor': 'middle', 'font-family': 'JetBrains Mono,monospace', 'font-size': '11', fill: 'var(--text-secondary)' }, msg));
@@ -756,14 +806,13 @@ const Terminal = (() => {
 
   function _autocomplete() {
     const val = _in.value;
-    const completions = ['git init','git commit -m ""','git branch','git branch -a','git checkout','git checkout -b','git merge','git rebase','git cherry-pick','git reset --hard HEAD~1','git stash','git stash pop','git log','git status','git tag','help','clear'];
+    const completions = ['git init','git commit -m ""','git branch','git branch -a','git checkout','git checkout -b','git merge','git rebase','git cherry-pick','git reset --hard HEAD~1','git stash','git stash pop','git log','git log --graph','git status','git push','git pull','git tag','help','clear'];
     const matches = completions.filter(c => c.startsWith(val));
     if (matches.length === 1) _in.value = matches[0];
     else if (matches.length > 1) printLines([{ text: matches.join('   '), cls: 'muted' }]);
   }
 
   function printCommand(raw) {
-    // Visual separator between command groups
     const div = document.createElement('div');
     div.className = 'output-divider';
     _out.appendChild(div);
@@ -861,7 +910,7 @@ const Scenarios = (() => {
   const LIST = [
     {
       label: 'Feature Branch Workflow',
-      desc:  'Branch off main, commit, merge back',
+      desc:  'Branch off master, commit, merge back',
       commands: [
         'git init',
         'git commit -m "initial commit"',
@@ -869,23 +918,23 @@ const Scenarios = (() => {
         'git checkout -b feature/login',
         'git commit -m "add login form"',
         'git commit -m "add auth logic"',
-        'git checkout main',
+        'git checkout master',
         'git merge feature/login',
       ],
     },
     {
-      label: 'Rebase onto Main',
-      desc:  'Branch diverges, rebase it on top of main',
+      label: 'Rebase onto Master',
+      desc:  'Branch diverges, rebase it on top of master',
       commands: [
         'git init',
         'git commit -m "initial commit"',
         'git checkout -b feature',
         'git commit -m "feature work A"',
         'git commit -m "feature work B"',
-        'git checkout main',
-        'git commit -m "hotfix on main"',
+        'git checkout master',
+        'git commit -m "hotfix on master"',
         'git checkout feature',
-        'git rebase main',
+        'git rebase master',
       ],
     },
     {
@@ -896,7 +945,7 @@ const Scenarios = (() => {
         'git commit -m "initial commit"',
         'git checkout -b bugfix',
         'git commit -m "fix critical bug"',
-        'git checkout main',
+        'git checkout master',
         'git commit -m "new feature"',
       ],
     },
@@ -910,9 +959,21 @@ const Scenarios = (() => {
         'git checkout -b feature-a',
         'git commit -m "feature A part 1"',
         'git commit -m "feature A done"',
-        'git checkout main',
-        'git commit -m "main hotfix"',
+        'git checkout master',
+        'git commit -m "master hotfix"',
         'git merge feature-a',
+      ],
+    },
+    {
+      label: 'Push & Pull Demo',
+      desc:  'See origin/ tracking badges appear on graph',
+      commands: [
+        'git init',
+        'git commit -m "initial commit"',
+        'git commit -m "add feature"',
+        'git push',
+        'git commit -m "more work"',
+        'git push',
       ],
     },
   ];
@@ -986,152 +1047,123 @@ const App = (() => {
       if (e.key === 'Escape')             { DetailPanel.hide(); }
     });
 
-    // Onboarding button logic
+    // Tutorial button
     const tutorialBtn = document.getElementById('start-tutorial-btn');
     if (tutorialBtn) {
       tutorialBtn.addEventListener('click', () => {
-        console.log('[DEBUG] Start Tutorial button clicked');
         const panel = document.getElementById('onboarding-panel');
-        if (!panel) {
-          console.error('[DEBUG] Onboarding panel not found!');
-        }
         _onboarding = new Onboarding(panel, _handleCommand, () => _rerender());
-        console.log('[DEBUG] Onboarding instance created:', _onboarding);
         _onboarding.start();
-        console.log('[DEBUG] Onboarding started, panel display:', panel.style.display);
       });
     }
 
     _rerender();
   }
-// Onboarding Tutorial Logic
-class Onboarding {
-  constructor(panelEl, runCommand, rerender) {
-    this.panelEl = panelEl;
-    this.runCommand = runCommand;
-    this.rerender = rerender;
-    this.steps = [
-      {
-        title: 'Step 1: Initialize Repository',
-        desc: 'Let\'s start by initializing a new git repository.',
-        action: 'Type <code>git init</code> below and press Enter.',
-        check: () => GitState.isInitialized(),
-        suggest: 'git init',
-      },
-      {
-        title: 'Step 2: Make Your First Commit',
-        desc: 'Now, create your first commit. Try: <code>git commit -m \"first commit\"</code>',
-        action: 'Type <code>git commit -m "first commit"</code> and press Enter.',
-        check: () => {
-          const snap = GitState.snapshot();
-          return snap.initialized && Object.keys(snap.commits).length > 0;
-        },
-        suggest: 'git commit -m "first commit"',
-      },
-      {
-        title: 'Step 3: Create a Branch',
-        desc: 'Let\'s create a new branch called <b>feature</b>.',
-        action: 'Type <code>git branch feature</code> and press Enter.',
-        check: () => {
-          const snap = GitState.snapshot();
-          return snap.branches && snap.branches['feature'];
-        },
-        suggest: 'git branch feature',
-      },
-      {
-        title: 'Step 4: Switch to the Feature Branch',
-        desc: 'Now, switch to your new branch.',
-        action: 'Type <code>git checkout feature</code> and press Enter.',
-        check: () => {
-          const snap = GitState.snapshot();
-          return snap.HEAD === 'feature';
-        },
-        suggest: 'git checkout feature',
-      },
-      {
-        title: 'Step 5: Merge Feature Branch',
-        desc: 'Finally, merge <b>feature</b> back into <b>main</b>.',
-        action: 'Switch to <code>main</code> (<code>git checkout main</code>), then type <code>git merge feature</code>.',
-        check: () => {
-          const snap = GitState.snapshot();
-          // Check if main branch tip is a merge commit with feature as parent
-          if (snap.HEAD !== 'main') return false;
-          const mainSha = snap.branches['main'];
-          const commit = snap.commits[mainSha];
-          return commit && commit.isMerge && commit.parents && commit.parents.length === 2;
-        },
-        suggest: 'git checkout main',
-      },
-    ];
-    this.current = 0;
-    this._boundOnInput = this.onInput.bind(this);
-    this._boundOnSuggest = this.onSuggest.bind(this);
-    document.getElementById('terminal-input').addEventListener('input', this._boundOnInput);
-  }
 
-  start() {
-    console.log('[DEBUG] Onboarding.start() called');
-    this.panelEl.style.display = '';
-    this.current = 0;
-    this.render();
-    console.log('[DEBUG] Onboarding panel should now be visible.');
-  }
-
-  render() {
-    const step = this.steps[this.current];
-    let html = `<div class="onboarding-step-title">${step.title}</div>`;
-    html += `<div class="onboarding-step-desc">${step.desc}</div>`;
-    html += `<div class="onboarding-step-action">👉 ${step.action}`;
-    if (step.check()) html += '<span class="onboarding-step-done">✓ Done</span>';
-    html += '</div>';
-    if (!step.check()) html += `<button class="onboard-btn" id="onboard-suggest-btn">Try: ${step.suggest}</button>`;
-    if (this.current > 0) html += `<button class="onboard-btn" id="onboard-prev-btn">Back</button>`;
-    if (step.check() && this.current < this.steps.length - 1) html += `<button class="onboard-btn" id="onboard-next-btn">Next</button>`;
-    if (step.check() && this.current === this.steps.length - 1) html += `<div style="margin-top:12px;font-weight:600;color:var(--success)">🎉 Tutorial complete! You\'ve learned the basics of git.</div>`;
-    this.panelEl.innerHTML = html;
-    console.log('[DEBUG] Onboarding.render() called, current step:', this.current, 'panelEl:', this.panelEl);
-    const suggestBtn = document.getElementById('onboard-suggest-btn');
-    if (suggestBtn) suggestBtn.addEventListener('click', this._boundOnSuggest);
-    const nextBtn = document.getElementById('onboard-next-btn');
-    if (nextBtn) nextBtn.addEventListener('click', () => { this.current++; this.render(); });
-    const prevBtn = document.getElementById('onboard-prev-btn');
-    if (prevBtn) prevBtn.addEventListener('click', () => { this.current--; this.render(); });
-  }
-
-  onInput() {
-    // Re-render if step is completed
-    if (this.steps[this.current].check()) {
-      setTimeout(() => this.render(), 200);
+  // Onboarding Tutorial
+  class Onboarding {
+    constructor(panelEl, runCommand, rerender) {
+      this.panelEl = panelEl;
+      this.runCommand = runCommand;
+      this.rerender = rerender;
+      this.steps = [
+        {
+          title: 'Step 1: Initialize Repository',
+          desc: 'Start by initializing a new git repository.',
+          action: 'Type <code>git init</code> below and press Enter.',
+          check: () => GitState.isInitialized(),
+          suggest: 'git init',
+        },
+        {
+          title: 'Step 2: Make Your First Commit',
+          desc: 'Create your first commit.',
+          action: 'Type <code>git commit -m "first commit"</code> and press Enter.',
+          check: () => { const snap = GitState.snapshot(); return snap.initialized && Object.keys(snap.commits).length > 0; },
+          suggest: 'git commit -m "first commit"',
+        },
+        {
+          title: 'Step 3: Create a Branch',
+          desc: 'Create a new branch called <b>feature</b>.',
+          action: 'Type <code>git branch feature</code> and press Enter.',
+          check: () => { const snap = GitState.snapshot(); return snap.branches && snap.branches['feature'] !== undefined; },
+          suggest: 'git branch feature',
+        },
+        {
+          title: 'Step 4: Switch to Feature Branch',
+          desc: 'Switch to your new branch.',
+          action: 'Type <code>git checkout feature</code> and press Enter.',
+          check: () => GitState.snapshot().HEAD === 'feature',
+          suggest: 'git checkout feature',
+        },
+        {
+          title: 'Step 5: Merge Feature Branch',
+          desc: 'Merge <b>feature</b> back into <b>master</b>.',
+          action: 'Switch to <code>master</code> then type <code>git merge feature</code>.',
+          check: () => {
+            const snap = GitState.snapshot();
+            if (snap.HEAD !== 'master') return false;
+            const mainSha = snap.branches['master'];
+            const commit = snap.commits[mainSha];
+            return commit && commit.isMerge;
+          },
+          suggest: 'git checkout master',
+        },
+      ];
+      this.current = 0;
+      this._boundOnInput = this.onInput.bind(this);
+      document.getElementById('terminal-input').addEventListener('input', this._boundOnInput);
     }
-  }
 
-  onSuggest() {
-    const step = this.steps[this.current];
-    this.runCommand(step.suggest);
-    setTimeout(() => this.render(), 400);
+    start() {
+      this.panelEl.style.display = '';
+      this.current = 0;
+      this.render();
+    }
+
+    render() {
+      const step = this.steps[this.current];
+      let html = `<div class="onboarding-step-title">${step.title}</div>`;
+      html += `<div class="onboarding-step-desc">${step.desc}</div>`;
+      html += `<div class="onboarding-step-action">👉 ${step.action}`;
+      if (step.check()) html += '<span class="onboarding-step-done">✓ Done</span>';
+      html += '</div>';
+      if (!step.check()) html += `<button class="onboard-btn" id="onboard-suggest-btn">Try: ${step.suggest}</button>`;
+      if (this.current > 0) html += `<button class="onboard-btn" id="onboard-prev-btn">Back</button>`;
+      if (step.check() && this.current < this.steps.length - 1) html += `<button class="onboard-btn" id="onboard-next-btn">Next</button>`;
+      if (step.check() && this.current === this.steps.length - 1) html += `<div style="margin-top:12px;font-weight:600;color:var(--success)">🎉 Tutorial complete!</div>`;
+      this.panelEl.innerHTML = html;
+      const suggestBtn = document.getElementById('onboard-suggest-btn');
+      if (suggestBtn) suggestBtn.addEventListener('click', () => { this.runCommand(step.suggest); setTimeout(() => this.render(), 400); });
+      const nextBtn = document.getElementById('onboard-next-btn');
+      if (nextBtn) nextBtn.addEventListener('click', () => { this.current++; this.render(); });
+      const prevBtn = document.getElementById('onboard-prev-btn');
+      if (prevBtn) prevBtn.addEventListener('click', () => { this.current--; this.render(); });
+    }
+
+    onInput() { if (this.steps[this.current].check()) setTimeout(() => this.render(), 200); }
   }
-}
 
   function _handleCommand(raw) {
-    // Command explainer logic
     let explainer = '';
     if (raw.trim().startsWith('git ')) {
       const cmd = raw.trim().split(' ')[1];
-      switch (cmd) {
-        case 'init': explainer = 'Initialize a new git repository.'; break;
-        case 'commit': explainer = 'Record changes to the repository.'; break;
-        case 'branch': explainer = 'Create, list, or manage branches.'; break;
-        case 'checkout': explainer = 'Switch branches or restore files.'; break;
-        case 'merge': explainer = 'Merge a branch into the current branch.'; break;
-        case 'rebase': explainer = 'Replay commits from one branch onto another.'; break;
-        case 'cherry-pick': explainer = 'Apply a commit from another branch.'; break;
-        case 'reset': explainer = 'Reset current branch to a specific commit.'; break;
-        case 'stash': explainer = 'Save and restore working state.'; break;
-        case 'tag': explainer = 'Create a lightweight tag.'; break;
-        case 'log': explainer = 'Show commit history.'; break;
-        case 'status': explainer = 'Show HEAD info and branch status.'; break;
-        default: explainer = '';
-      }
+      const map = {
+        init: 'Initialize a new git repository.',
+        commit: 'Record changes to the repository.',
+        branch: 'Create, list, or manage branches.',
+        checkout: 'Switch branches or restore files.',
+        merge: 'Merge a branch into the current branch.',
+        rebase: 'Replay commits from one branch onto another.',
+        'cherry-pick': 'Apply a commit from another branch.',
+        reset: 'Reset current branch to a specific commit.',
+        stash: 'Save and restore working state.',
+        tag: 'Create a lightweight tag.',
+        log: 'Show commit history.',
+        status: 'Show HEAD info and branch status.',
+        push: 'Upload local branch commits to origin. The origin/ badge will appear on the graph.',
+        pull: 'Download changes from origin and fast-forward your local branch.',
+      };
+      explainer = map[cmd] || '';
     }
     if (explainer) Terminal.printLines([{ text: explainer, cls: 'info' }, { spacer: true }]);
     Terminal.printCommand(raw);
@@ -1147,7 +1179,7 @@ class Onboarding {
     GraphRenderer.render(snap, _svgEl, _emptyEl, _legendEl);
     _updateStatus(snap);
     if (snap.initialized && Object.keys(snap.commits).length > 0) {
-      setTimeout(() => { _viewportEl.scrollTop = 0; }, 60); // newest at top
+      setTimeout(() => { _viewportEl.scrollTop = 0; }, 60);
     }
   }
 
