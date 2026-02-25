@@ -390,6 +390,30 @@ const CommandParser = (() => {
 
         log: (rest) => {
           _req();
+          // Support git log --graph
+          if (rest[0] === '--graph') {
+            try {
+              const entries = GitState.log(20);
+              if (!entries.length) return [out.muted('No commits yet.')];
+              // Build a simple ASCII graph
+              let graphLines = [];
+              for (let i = 0; i < entries.length; i++) {
+                const c = entries[i];
+                // Show merge lines if parents > 1
+                let graph = '|';
+                if (c.parents.length > 1) graph = '*─┬';
+                else if (i === 0) graph = '*';
+                else graph = '|';
+                const d = new Date(c.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                graphLines.push(out.code(`${graph} commit ${c.sha}`));
+                graphLines.push(out.line(`    ${c.message}`));
+                graphLines.push(out.muted(`    ${d}`));
+                graphLines.push(out.spacer());
+              }
+              return graphLines;
+            } catch (e) { return [out.error(`error: ${e.message}`)]; }
+          }
+          // Default log
           const limit = parseInt(rest[0]) || 10;
           try {
             const entries = GitState.log(limit);
