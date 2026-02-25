@@ -33,7 +33,7 @@ const GitState = (() => {
 
   function _branchColor(name) {
     const palette = ['--branch-0','--branch-1','--branch-2','--branch-3','--branch-4','--branch-5'];
-    if (name === 'main' || name === 'master') return palette[0];
+    if (name === 'master' || name === 'main') return palette[0];
     let hash = 0;
     for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
     return palette[Math.abs(hash) % (palette.length - 1) + 1];
@@ -43,8 +43,8 @@ const GitState = (() => {
 
   function init() {
     _initialized = true;
-    _commits = {}; _branches = { main: null };
-    _HEAD = 'main'; _detached = false; _stash = []; _tags = {};
+    _commits = {}; _branches = { master: null };
+    _HEAD = 'master'; _detached = false; _stash = []; _tags = {};
   }
 
   function commit(message) {
@@ -277,7 +277,7 @@ const CommandParser = (() => {
         init: () => {
           if (GitState.isInitialized()) return [out.warn('Reinitialized existing Git repository')];
           GitState.init();
-          return [out.success('Initialized empty Git repository'), out.muted('Branch: main')];
+          return [out.success('Initialized empty Git repository'), out.muted('Branch: master')];
         },
 
         commit: (rest) => {
