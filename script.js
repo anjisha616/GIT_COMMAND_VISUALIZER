@@ -106,8 +106,17 @@ const GitState = (() => {
     const sourceSha = _branches[sourceBranch], currentSha = _currentSha();
     if (!sourceSha) throw new Error(`branch '${sourceBranch}' has no commits`);
     if (!currentSha) throw new Error('current branch has no commits');
+    // Edge case: merging ancestor branch (should be already-up-to-date)
     if (sourceSha === currentSha || _isAncestor(sourceSha, currentSha)) return { type: 'already-up-to-date' };
+    // Edge case: merging unrelated histories (no common ancestor)
+    let hasCommonAncestor = false;
+    const ancestorsA = _getAllAncestors(currentSha);
+    const ancestorsB = _getAllAncestors(sourceSha);
+    for (let sha of ancestorsA) { if (ancestorsB.has(sha)) { hasCommonAncestor = true; break; } }
+    if (!hasCommonAncestor) throw new Error('cannot merge: unrelated histories');
+    // Fast-forward merge
     if (_isAncestor(currentSha, sourceSha)) { _branches[_HEAD] = sourceSha; return { type: 'fast-forward', sha: sourceSha }; }
+    // True merge
     const sha = _sha();
     _commits[sha] = { sha, message: `Merge branch '${sourceBranch}' into ${_HEAD}`, parents: [currentSha, sourceSha], timestamp: Date.now(), branch: _HEAD, isMerge: true };
     _branches[_HEAD] = sha;
