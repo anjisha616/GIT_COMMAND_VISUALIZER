@@ -356,7 +356,6 @@ code { font-family: var(--font-mono); }
   .graph-panel { border-right: none; border-bottom: 1px solid var(--border); }
   .topbar-desc { display: none; }
 }
-
 /* Animated graph node transitions */
 .graph-panel svg circle {
   transition: cx 0.22s cubic-bezier(.4,1.4,.6,1), cy 0.22s cubic-bezier(.4,1.4,.6,1), r 0.18s cubic-bezier(.4,1.4,.6,1), fill 0.18s, stroke 0.18s;
