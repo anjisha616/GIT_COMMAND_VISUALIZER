@@ -337,6 +337,8 @@ code.detail-value { color: var(--text-code); font-size: 12.5px; }
 .dim { color: var(--text-muted); }
 code { font-family: var(--font-mono); }
 
+
+
 @media (max-width: 860px) {
   .layout { grid-template-columns: 1fr; grid-template-rows: 1fr 300px; }
   .graph-panel { border-right: none; border-bottom: 1px solid var(--border); }
